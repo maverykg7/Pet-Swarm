@@ -1,4 +1,4 @@
--- GK Hub - Versão Unificada Otimizada (sem congelamento)
+-- GK Hub - Versão Completa com Eggs Ultra Rápido (0.001s)
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,7 +18,7 @@ local FeedRemote = Events and Events:FindFirstChild("FeedEggEvent")
 local SacrificeRemote = Functions and Functions:FindFirstChild("SacrificeFunction")
 local ZonesRF = Functions and Functions:FindFirstChild("ZonesRF")
 
--- Cache de zonas (carregar uma vez)
+-- Cache de zonas
 local zoneCache = {}
 local zoneList = {
     "SummerEvent1", "WinterEvent1", "EleEgg1", "6", "4", "15", "10", "27",
@@ -85,17 +85,21 @@ local bossList = {
 local bossEnabled = {}
 for _, name in ipairs(bossList) do bossEnabled[name] = true end
 
--- Inimigos principais
+-- Lista de inimigos completa
 local enemyZones = {
-    { name = "Summer", zone = "SummerEventZone" },
-    { name = "Winter", zone = "WinterEventZone" },
-    { name = "Draco", zone = "Zone12" },
-    { name = "Sphinx", zone = "ElementEventZone1" },
+    { name = "Summer", zone = "SummerEventZone", attackAll = true },
+    { name = "Winter", zone = "WinterEventZone", attackAll = true },
+    { name = "Sphinx (Evil Eagle)", zone = "ElementEventZone1", enemy = "Evil Eagle" },
+    { name = "Cursed Mummy", zone = "Zone2", enemy = "Cursed Mummy" },
+    { name = "Crazy Unicorn", zone = "Zone5", enemy = "Crazy Unicorn" },
+    { name = "Terror Tree", zone = "Zone10", enemy = "Terror Tree" },
+    { name = "Draco's Guard", zone = "Zone12", enemy = "Draco's Guard" },
+    { name = "Possessed Slime", zone = "Zone12.1", enemy = "Possessed Slime" },
 }
 local enemyEnabled = {}
 for i = 1, #enemyZones do enemyEnabled[i] = false end
 
--- Comida
+-- Zonas de comida
 local foodZones = {
     { name = "Crystal Food", zone = "Zone12.1", enabled = false },
     { name = "Draco Food", zone = "Zone12", enabled = false },
@@ -103,32 +107,50 @@ local foodZones = {
 
 -- Configurações
 local config = {
-    farmBosses = false, farmEnemies = false, farmFood = false,
-    autoPlant = false, autoHatch = false, autoNests = false,
-    doubleJump = false, wallspeed = 16,
-    bossAttackDelay = 0.5, enemyDelay = 0.5, foodDelay = 0.5, eggDelay = 0.5,
+    farmBosses = false,
+    farmEnemies = false,
+    farmFood = false,
+    autoPlant = false,
+    autoHatch = false,
+    autoNests = false,
+    doubleJump = false,
+    wallspeed = 16,
+    bossAttackDelay = 0.5,
+    enemyDelay = 0.5,
+    foodDelay = 0.5,
+    eggDelay = 0.001, -- ultra rápido
 }
 
 -- Estado dos bosses ativos
 local activeBosses = {}
 local eggsSelected = {}
 
--- Dados dos ovos
+-- Dados dos ovos (completos)
 local eggData = {
-    { name = "Summer Egg", zone = "SummerEvent1" }, { name = "Winter Egg", zone = "WinterEvent1" },
-    { name = "Sphinx Egg", zone = "EleEgg1" }, { name = "Desert Egg", zone = "6" },
-    { name = "Swamp Egg", zone = "4" }, { name = "Sky Egg", zone = "15" },
-    { name = "Cosmos Egg", zone = "10" }, { name = "Void Egg", zone = "27" },
-    { name = "Tiki Egg", zone = "30" }, { name = "Tiki Island Egg", zone = "11" },
-    { name = "Draco Egg", zone = "34" }, { name = "Crystal Egg", zone = "12.1" },
-    { name = "Octopus Egg", zone = "30" }, { name = "Forest Egg", zone = "1" },
-    { name = "Frozen Egg", zone = "3" }, { name = "Magma Egg", zone = "7" },
-    { name = "Atlantis Egg", zone = "8" }, { name = "Aqua Egg", zone = "9" },
-    { name = "Egg Of Oblivion", zone = "12" }, { name = "Mythical Egg", zone = "13" },
+    { name = "Summer Egg", zone = "SummerEvent1" },
+    { name = "Winter Egg", zone = "WinterEvent1" },
+    { name = "Sphinx Egg", zone = "EleEgg1" },
+    { name = "Desert Egg", zone = "6" },
+    { name = "Swamp Egg", zone = "4" },
+    { name = "Sky Egg", zone = "15" },
+    { name = "Cosmos Egg", zone = "10" },
+    { name = "Void Egg", zone = "27" },
+    { name = "Tiki Egg", zone = "30" },
+    { name = "Tiki Island Egg", zone = "11" },
+    { name = "Draco Egg", zone = "34" },
+    { name = "Crystal Egg", zone = "12.1" },
+    { name = "Octopus Egg", zone = "30" },
+    { name = "Forest Egg", zone = "1" },
+    { name = "Frozen Egg", zone = "3" },
+    { name = "Magma Egg", zone = "7" },
+    { name = "Atlantis Egg", zone = "8" },
+    { name = "Aqua Egg", zone = "9" },
+    { name = "Egg Of Oblivion", zone = "12" },
+    { name = "Mythical Egg", zone = "13" },
     { name = "Legendary Egg", zone = "14" },
 }
 
--- Funções de ataque (sem spawn)
+-- Funções de ataque
 local function safeAttackEnemy(enemy, pet)
     if CombatRemote then pcall(CombatRemote.InvokeServer, CombatRemote, "AttackEnemy", enemy, pet) end
 end
@@ -136,21 +158,30 @@ local function safeCollectFood(food, pet)
     if CollectionRemote then pcall(CollectionRemote.InvokeServer, CollectionRemote, "CollectFood", food, pet) end
 end
 
--- Ataque a inimigos (3 ciclos por zona)
-local function attackEnemiesInZone(zoneName, cycles)
+-- Ataque a inimigos
+local function attackEnemiesInZone(zoneName, specificEnemy, attackAll)
     local zone = zoneCache[zoneName]
     if not zone then return end
     local enemiesObj = zone:FindFirstChild("Enemies")
     if not enemiesObj then return end
-    for cycle = 1, cycles do
-        local enemies = enemiesObj:GetChildren()
-        if #enemies == 0 then break end
-        local pets = updatePets()
-        if #pets == 0 then return end
+    local enemies
+    if attackAll then
+        enemies = enemiesObj:GetChildren()
+    else
+        local enemy = enemiesObj:FindFirstChild(specificEnemy)
+        enemies = enemy and {enemy} or {}
+    end
+    if #enemies == 0 then return end
+    local pets = updatePets()
+    if #pets == 0 then return end
+    if attackAll then
         for i = 1, math.min(#pets, #enemies) do
             safeAttackEnemy(enemies[i], pets[i])
         end
-        if cycle < cycles then task.wait(0.05) end
+    else
+        for _, pet in ipairs(pets) do
+            safeAttackEnemy(enemies[1], pet)
+        end
     end
 end
 
@@ -191,23 +222,31 @@ local function collectFood()
     end
 end
 
--- Plantio, hatch, nests
+-- Funções de eggs (usam eggDelay)
 local function doPlanting()
     if not config.autoPlant or #eggsSelected == 0 or not PlantRemote then return end
     for _, zone in ipairs(eggsSelected) do
-        for _ = 1, 9 do pcall(PlantRemote.FireServer, PlantRemote, zone) end
+        for _ = 1, 9 do
+            task.spawn(function() pcall(PlantRemote.FireServer, PlantRemote, zone) end)
+        end
     end
 end
+
 local function doHatching()
     if not config.autoHatch or not HatchRemote then return end
-    for _ = 1, 5 do pcall(HatchRemote.FireServer, HatchRemote) end
+    for _ = 1, 5 do
+        task.spawn(function() pcall(HatchRemote.FireServer, HatchRemote) end)
+    end
 end
+
 local function doNests()
     if not config.autoNests or not FeedRemote then return end
     local nests = updateNests()
     if nests then
         for _, nest in ipairs(nests:GetChildren()) do
-            for _ = 1, 5 do pcall(FeedRemote.FireServer, FeedRemote, nest) end
+            for _ = 1, 5 do
+                task.spawn(function() pcall(FeedRemote.FireServer, FeedRemote, nest) end)
+            end
         end
     end
 end
@@ -236,22 +275,28 @@ local function sacrificePet(petName)
     if SacrificeRemote then
         local success = pcall(function() SacrificeRemote:InvokeServer("SacrificeWell", petName) end)
         if success then
-            game:GetService("StarterGui"):SetCore("SendNotification", { Title = "Sacrifice", Text = petName .. " sacrificed!", Duration = 1 })
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Sacrifice", Text = petName .. " sacrificed!", Duration = 1
+            })
         end
     end
 end
 
--- Variáveis de controle
+-- Remover animação
+local function removeHatchAnimation()
+    local ev = ReplicatedStorage and ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Events") and ReplicatedStorage.Remotes.Events:FindFirstChild("HatchAnimationEvent")
+    if ev then ev:Destroy() end
+end
+
+-- Sistema de tarefas (loop principal)
 local active = false
 local mainThread = nil
 local tasks = {}
 
--- Função para adicionar tarefa
 local function addTask(name, func, interval)
     table.insert(tasks, { func = func, interval = interval, nextTime = 0 })
 end
 
--- Loop principal (único)
 local function mainLoop()
     while active do
         local now = os.clock()
@@ -262,7 +307,7 @@ local function mainLoop()
                 task.nextTime = now + task.interval
             end
         end
-        task.wait(0.05) -- pequeno delay para não sobrecarregar
+        task.wait(0.05)
     end
 end
 
@@ -271,7 +316,7 @@ local function start()
     if active then return end
     active = true
     tasks = {}
-    
+
     -- Pré-carregar zonas
     if ZonesRF then
         pcall(ZonesRF.InvokeServer, ZonesRF, "RequestZoneMap", "Zone12.1")
@@ -279,20 +324,25 @@ local function start()
         pcall(ZonesRF.InvokeServer, ZonesRF, "RequestZoneMap", "WinterEventZone")
         pcall(ZonesRF.InvokeServer, ZonesRF, "RequestZoneMap", "ElementEventZone1")
     end
-    
+
     scanBosses()
-    
-    -- Adicionar tarefas com seus intervalos
+
+    -- Tarefas
     addTask("bossScan", scanBosses, 10)
     addTask("bossAttack", function()
         if config.farmBosses and #activeBosses > 0 then attackBosses() end
-    end, 0) -- delay 0, mas o próprio attackBosses já tem delay interno
+    end, 0)
     addTask("enemyAttack", function()
         if config.farmEnemies then
-            if enemyEnabled[1] then attackEnemiesInZone("SummerEventZone", 3) end
-            if enemyEnabled[2] then attackEnemiesInZone("WinterEventZone", 3) end
-            if enemyEnabled[3] then attackEnemiesInZone("Zone12", 3) end
-            if enemyEnabled[4] then attackEnemiesInZone("ElementEventZone1", 3) end
+            for idx, zoneInfo in ipairs(enemyZones) do
+                if enemyEnabled[idx] then
+                    if zoneInfo.attackAll then
+                        attackEnemiesInZone(zoneInfo.zone, nil, true)
+                    else
+                        attackEnemiesInZone(zoneInfo.zone, zoneInfo.enemy, false)
+                    end
+                end
+            end
         end
     end, config.enemyDelay)
     addTask("foodCollect", function()
@@ -301,34 +351,28 @@ local function start()
     addTask("plant", doPlanting, config.eggDelay)
     addTask("hatch", doHatching, config.eggDelay)
     addTask("nests", doNests, config.eggDelay)
-    
+
     mainThread = task.spawn(mainLoop)
-    
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "GK Hub", Text = "Farm started!", Duration = 3
-    })
+    Rayfield:Notify({ Title = "GK Hub", Content = "Farm iniciado!", Duration = 3 })
 end
 
--- Parar farm
 local function stop()
     active = false
     if mainThread then task.cancel(mainThread); mainThread = nil end
     activeBosses = {}
-    game:GetService("StarterGui"):SetCore("SendNotification", { Title = "GK Hub", Text = "Farm stopped.", Duration = 2 })
-end
-
--- Remover animação
-local function removeHatchAnimation()
-    local ev = ReplicatedStorage and ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Events") and ReplicatedStorage.Remotes.Events:FindFirstChild("HatchAnimationEvent")
-    if ev then ev:Destroy() end
+    Rayfield:Notify({ Title = "GK Hub", Content = "Farm parado.", Duration = 2 })
 end
 
 -- Interface Rayfield
 local win = Rayfield:CreateWindow({
-    Name = "GK Hub", LoadingTitle = "Pet Swarm Sim", LoadingSubtitle = "Unified",
-    ConfigurationSaving = { Enabled = true, FolderName = "gkhub", FileName = "Config" }, Theme = "Dark"
+    Name = "GK Hub",
+    LoadingTitle = "Pet Swarm Sim",
+    LoadingSubtitle = "Complete Edition",
+    ConfigurationSaving = { Enabled = true, FolderName = "gkhub", FileName = "Config" },
+    Theme = "Dark"
 })
 
+-- Main Tab
 local mainTab = win:CreateTab("Main")
 mainTab:CreateSection("Control")
 mainTab:CreateButton({ Name = "Start Farming", Callback = start })
@@ -368,22 +412,38 @@ mainTab:CreateLabel("developed by Maveryk1t")
 mainTab:CreateLabel("yt: Maveryk1t")
 mainTab:CreateLabel("discord: knzd1")
 
--- Speed Tab (simplificada)
+-- Speed Tab (com eggDelay até 0.001)
 local speedTab = win:CreateTab("Speed")
 speedTab:CreateSection("Delays")
 speedTab:CreateSlider({ Name = "Boss Attack Delay", Range = {0.1, 1}, Increment = 0.1, CurrentValue = config.bossAttackDelay, Callback = function(v) config.bossAttackDelay = v end })
 speedTab:CreateSlider({ Name = "Enemy Cycle Delay", Range = {0.1, 1}, Increment = 0.1, CurrentValue = config.enemyDelay, Callback = function(v) config.enemyDelay = v end })
 speedTab:CreateSlider({ Name = "Food Cycle Delay", Range = {0.1, 3}, Increment = 0.1, CurrentValue = config.foodDelay, Callback = function(v) config.foodDelay = v end })
-speedTab:CreateSlider({ Name = "Egg Cycle Delay", Range = {0.1, 5}, Increment = 0.1, CurrentValue = config.eggDelay, Callback = function(v) config.eggDelay = v end })
+speedTab:CreateSlider({ Name = "Eggs Cycle Delay", Range = {0.001, 0.5}, Increment = 0.001, CurrentValue = config.eggDelay, Callback = function(v) config.eggDelay = v end })
 
 -- Enemies Tab
 local enemiesTab = win:CreateTab("Enemies")
-enemiesTab:CreateSection("Enemy Farming (3 cycles)")
+enemiesTab:CreateSection("Enemy Farming")
 enemiesTab:CreateToggle({ Name = "Enable Enemies", CurrentValue = config.farmEnemies, Callback = function(v) config.farmEnemies = v end })
+
+enemiesTab:CreateSection("Event Enemies")
 enemiesTab:CreateToggle({ Name = "Summer", CurrentValue = enemyEnabled[1], Callback = function(v) enemyEnabled[1] = v end })
 enemiesTab:CreateToggle({ Name = "Winter", CurrentValue = enemyEnabled[2], Callback = function(v) enemyEnabled[2] = v end })
-enemiesTab:CreateToggle({ Name = "Draco", CurrentValue = enemyEnabled[3], Callback = function(v) enemyEnabled[3] = v end })
-enemiesTab:CreateToggle({ Name = "Sphinx", CurrentValue = enemyEnabled[4], Callback = function(v) enemyEnabled[4] = v end })
+enemiesTab:CreateToggle({ Name = "Sphinx (Evil Eagle)", CurrentValue = enemyEnabled[3], Callback = function(v) enemyEnabled[3] = v end })
+
+enemiesTab:CreateSection("Desert")
+enemiesTab:CreateToggle({ Name = "Cursed Mummy", CurrentValue = enemyEnabled[4], Callback = function(v) enemyEnabled[4] = v end })
+
+enemiesTab:CreateSection("Sky")
+enemiesTab:CreateToggle({ Name = "Crazy Unicorn", CurrentValue = enemyEnabled[5], Callback = function(v) enemyEnabled[5] = v end })
+
+enemiesTab:CreateSection("Tiki")
+enemiesTab:CreateToggle({ Name = "Terror Tree", CurrentValue = enemyEnabled[6], Callback = function(v) enemyEnabled[6] = v end })
+
+enemiesTab:CreateSection("Draco")
+enemiesTab:CreateToggle({ Name = "Draco's Guard", CurrentValue = enemyEnabled[7], Callback = function(v) enemyEnabled[7] = v end })
+
+enemiesTab:CreateSection("Crystal Island")
+enemiesTab:CreateToggle({ Name = "Possessed Slime", CurrentValue = enemyEnabled[8], Callback = function(v) enemyEnabled[8] = v end })
 
 -- Food Tab
 local foodTab = win:CreateTab("Food")
@@ -397,6 +457,7 @@ local bossTab = win:CreateTab("Bosses")
 bossTab:CreateSection("Boss Control")
 bossTab:CreateToggle({ Name = "Enable Boss Farming", CurrentValue = config.farmBosses, Callback = function(v) config.farmBosses = v end })
 bossTab:CreateToggle({ Name = "Enable All Bosses", CurrentValue = true, Callback = function(v) for _, name in ipairs(bossList) do bossEnabled[name] = v end end })
+
 bossTab:CreateSection("Boss List")
 for _, name in ipairs(bossList) do
     bossTab:CreateToggle({ Name = name, CurrentValue = bossEnabled[name], Callback = function(v) bossEnabled[name] = v end })
@@ -409,6 +470,7 @@ eggTab:CreateToggle({ Name = "Auto Plant", CurrentValue = config.autoPlant, Call
 eggTab:CreateToggle({ Name = "Auto Hatch", CurrentValue = config.autoHatch, Callback = function(v) config.autoHatch = v end })
 eggTab:CreateToggle({ Name = "Auto Nests", CurrentValue = config.autoNests, Callback = function(v) config.autoNests = v end })
 eggTab:CreateButton({ Name = "Remove Hatch Animation", Callback = removeHatchAnimation })
+
 eggTab:CreateSection("Select Eggs")
 for _, egg in ipairs(eggData) do
     eggTab:CreateToggle({
@@ -458,11 +520,13 @@ miscTab:CreateToggle({ Name = "Infinite Double Jump", CurrentValue = config.doub
         end
     elseif jumpConnection then jumpConnection:Disconnect(); jumpConnection = nil; jumpCount = 0 end
 end })
+
 miscTab:CreateSlider({ Name = "Walk Speed", Range = {16, 100}, Increment = 1, CurrentValue = config.wallspeed, Callback = function(v)
     config.wallspeed = v
     local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
     if humanoid then humanoid.WalkSpeed = v end
 end })
+
 miscTab:CreateSection("Hotkey")
 miscTab:CreateLabel("Press H to hide/show GUI")
 local guiVisible = true
@@ -473,4 +537,8 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
 end)
 
-game:GetService("StarterGui"):SetCore("SendNotification", { Title = "GK Hub", Text = "Loaded!", Duration = 3 })
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "GK Hub",
+    Text = "Complete Edition loaded!",
+    Duration = 3
+})
