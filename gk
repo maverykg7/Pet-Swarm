@@ -1,4 +1,4 @@
--- GK Hub - Versão Completa com Multi-Threads para Eggs
+-- GK Hub - Versão Completa com Eggs Ultra Rápido (0.001s)
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -118,8 +118,7 @@ local config = {
     bossAttackDelay = 0.5,
     enemyDelay = 0.5,
     foodDelay = 0.5,
-    eggDelay = 0.001,
-    eggThreads = 3,
+    eggDelay = 0.001, -- ultra rápido
 }
 
 -- Estado dos bosses ativos
@@ -223,7 +222,7 @@ local function collectFood()
     end
 end
 
--- Funções de eggs
+-- Funções de eggs (usam eggDelay)
 local function doPlanting()
     if not config.autoPlant or #eggsSelected == 0 or not PlantRemote then return end
     for _, zone in ipairs(eggsSelected) do
@@ -289,7 +288,7 @@ local function removeHatchAnimation()
     if ev then ev:Destroy() end
 end
 
--- Sistema de tarefas
+-- Sistema de tarefas (loop principal)
 local active = false
 local mainThread = nil
 local tasks = {}
@@ -308,7 +307,7 @@ local function mainLoop()
                 task.nextTime = now + task.interval
             end
         end
-        task.wait(0.01)
+        task.wait(0.05)
     end
 end
 
@@ -318,6 +317,7 @@ local function start()
     active = true
     tasks = {}
 
+    -- Pré-carregar zonas
     if ZonesRF then
         pcall(ZonesRF.InvokeServer, ZonesRF, "RequestZoneMap", "Zone12.1")
         pcall(ZonesRF.InvokeServer, ZonesRF, "RequestZoneMap", "SummerEventZone")
@@ -327,7 +327,7 @@ local function start()
 
     scanBosses()
 
-    -- Tarefas principais
+    -- Tarefas
     addTask("bossScan", scanBosses, 10)
     addTask("bossAttack", function()
         if config.farmBosses and #activeBosses > 0 then attackBosses() end
@@ -348,24 +348,12 @@ local function start()
     addTask("foodCollect", function()
         if config.farmFood then collectFood() end
     end, config.foodDelay)
-
-    -- EGGS COM MÚLTIPLAS THREADS
-    for i = 1, config.eggThreads do
-        addTask("plant_" .. i, function()
-            if config.autoPlant then doPlanting() end
-        end, config.eggDelay)
-        
-        addTask("hatch_" .. i, function()
-            if config.autoHatch then doHatching() end
-        end, config.eggDelay)
-        
-        addTask("nests_" .. i, function()
-            if config.autoNests then doNests() end
-        end, config.eggDelay)
-    end
+    addTask("plant", doPlanting, config.eggDelay)
+    addTask("hatch", doHatching, config.eggDelay)
+    addTask("nests", doNests, config.eggDelay)
 
     mainThread = task.spawn(mainLoop)
-    Rayfield:Notify({ Title = "GK Hub", Content = "Farm iniciado com " .. config.eggThreads .. "x threads para eggs!", Duration = 3 })
+    Rayfield:Notify({ Title = "GK Hub", Content = "Farm iniciado!", Duration = 3 })
 end
 
 local function stop()
@@ -379,7 +367,7 @@ end
 local win = Rayfield:CreateWindow({
     Name = "GK Hub",
     LoadingTitle = "Pet Swarm Sim",
-    LoadingSubtitle = "Multi-Thread Edition",
+    LoadingSubtitle = "Complete Edition",
     ConfigurationSaving = { Enabled = true, FolderName = "gkhub", FileName = "Config" },
     Theme = "Dark"
 })
@@ -424,14 +412,13 @@ mainTab:CreateLabel("developed by Maveryk1t")
 mainTab:CreateLabel("yt: Maveryk1t")
 mainTab:CreateLabel("discord: knzd1")
 
--- Speed Tab
+-- Speed Tab (com eggDelay até 0.001)
 local speedTab = win:CreateTab("Speed")
 speedTab:CreateSection("Delays")
 speedTab:CreateSlider({ Name = "Boss Attack Delay", Range = {0.1, 1}, Increment = 0.1, CurrentValue = config.bossAttackDelay, Callback = function(v) config.bossAttackDelay = v end })
 speedTab:CreateSlider({ Name = "Enemy Cycle Delay", Range = {0.1, 1}, Increment = 0.1, CurrentValue = config.enemyDelay, Callback = function(v) config.enemyDelay = v end })
 speedTab:CreateSlider({ Name = "Food Cycle Delay", Range = {0.1, 3}, Increment = 0.1, CurrentValue = config.foodDelay, Callback = function(v) config.foodDelay = v end })
 speedTab:CreateSlider({ Name = "Eggs Cycle Delay", Range = {0.001, 0.5}, Increment = 0.001, CurrentValue = config.eggDelay, Callback = function(v) config.eggDelay = v end })
-speedTab:CreateSlider({ Name = "Eggs Threads", Range = {1, 10}, Increment = 1, CurrentValue = config.eggThreads, Callback = function(v) config.eggThreads = v end })
 
 -- Enemies Tab
 local enemiesTab = win:CreateTab("Enemies")
@@ -552,6 +539,6 @@ end)
 
 game:GetService("StarterGui"):SetCore("SendNotification", {
     Title = "GK Hub",
-    Text = "Multi-Thread Edition loaded!",
+    Text = "Complete Edition loaded!",
     Duration = 3
 })
