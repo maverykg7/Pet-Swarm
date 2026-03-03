@@ -1,4 +1,4 @@
--- GK Hub - Versão Completa com Multi-Threads para Eggs (BLOCO 1/2)
+-- GK Hub - Versão Ultra Rápida com Threads Permanentes para Eggs (BLOCO 1/2)
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -223,35 +223,6 @@ local function collectFood()
     end
 end
 
--- Funções de eggs
-local function doPlanting()
-    if not config.autoPlant or #eggsSelected == 0 or not PlantRemote then return end
-    for _, zone in ipairs(eggsSelected) do
-        for _ = 1, 9 do
-            task.spawn(function() pcall(PlantRemote.FireServer, PlantRemote, zone) end)
-        end
-    end
-end
-
-local function doHatching()
-    if not config.autoHatch or not HatchRemote then return end
-    for _ = 1, 5 do
-        task.spawn(function() pcall(HatchRemote.FireServer, HatchRemote) end)
-    end
-end
-
-local function doNests()
-    if not config.autoNests or not FeedRemote then return end
-    local nests = updateNests()
-    if nests then
-        for _, nest in ipairs(nests:GetChildren()) do
-            for _ = 1, 5 do
-                task.spawn(function() pcall(FeedRemote.FireServer, FeedRemote, nest) end)
-            end
-        end
-    end
-end
-
 -- Scan de bosses
 local function scanBosses()
     if not config.farmBosses then activeBosses = {}; return end
@@ -289,7 +260,92 @@ local function removeHatchAnimation()
     if ev then ev:Destroy() end
 end
 
--- Sistema de tarefas
+-- GK Hub - Versão Ultra Rápida com Threads Permanentes para Eggs (BLOCO 2/2)
+
+-- ========== SISTEMA DE EGGS ULTRA RÁPIDO ==========
+local EggThreads = {
+    plant = {},
+    hatch = {},
+    nests = {},
+    running = false
+}
+
+-- Worker para plantio
+local function plantWorker()
+    while EggThreads.running do
+        if config.autoPlant and #eggsSelected > 0 and PlantRemote then
+            for _, zone in ipairs(eggsSelected) do
+                for _ = 1, 9 do
+                    pcall(PlantRemote.FireServer, PlantRemote, zone)
+                end
+            end
+        end
+        task.wait(config.eggDelay)
+    end
+end
+
+-- Worker para hatch
+local function hatchWorker()
+    while EggThreads.running do
+        if config.autoHatch and HatchRemote then
+            for _ = 1, 5 do
+                pcall(HatchRemote.FireServer, HatchRemote)
+            end
+        end
+        task.wait(config.eggDelay)
+    end
+end
+
+-- Worker para nests
+local function nestsWorker()
+    while EggThreads.running do
+        if config.autoNests and FeedRemote then
+            local nests = updateNests()
+            if nests then
+                for _, nest in ipairs(nests:GetChildren()) do
+                    for _ = 1, 5 do
+                        pcall(FeedRemote.FireServer, FeedRemote, nest)
+                    end
+                end
+            end
+        end
+        task.wait(config.eggDelay)
+    end
+end
+
+-- Iniciar threads de eggs
+local function startEggThreads()
+    EggThreads.running = true
+    
+    -- Mata threads antigas
+    for _, t in ipairs(EggThreads.plant) do task.cancel(t) end
+    for _, t in ipairs(EggThreads.hatch) do task.cancel(t) end
+    for _, t in ipairs(EggThreads.nests) do task.cancel(t) end
+    
+    EggThreads.plant = {}
+    EggThreads.hatch = {}
+    EggThreads.nests = {}
+    
+    -- Cria novas threads
+    for i = 1, config.eggThreads do
+        table.insert(EggThreads.plant, task.spawn(plantWorker))
+        table.insert(EggThreads.hatch, task.spawn(hatchWorker))
+        table.insert(EggThreads.nests, task.spawn(nestsWorker))
+    end
+end
+
+-- Parar threads de eggs
+local function stopEggThreads()
+    EggThreads.running = false
+    for _, t in ipairs(EggThreads.plant) do task.cancel(t) end
+    for _, t in ipairs(EggThreads.hatch) do task.cancel(t) end
+    for _, t in ipairs(EggThreads.nests) do task.cancel(t) end
+    EggThreads.plant = {}
+    EggThreads.hatch = {}
+    EggThreads.nests = {}
+end
+
+-- Sistema de tarefas (para outros farms)
 local active = false
 local mainThread = nil
 local tasks = {}
@@ -312,8 +368,6 @@ local function mainLoop()
     end
 end
 
--- GK Hub - Versão Completa com Multi-Threads para Eggs (BLOCO 2/2)
-
 -- Iniciar farm
 local function start()
     if active then return end
@@ -329,7 +383,7 @@ local function start()
 
     scanBosses()
 
-    -- Tarefas principais
+    -- Tarefas principais (sem eggs)
     addTask("bossScan", scanBosses, 10)
     addTask("bossAttack", function()
         if config.farmBosses and #activeBosses > 0 then attackBosses() end
@@ -351,27 +405,17 @@ local function start()
         if config.farmFood then collectFood() end
     end, config.foodDelay)
 
-    -- EGGS COM MÚLTIPLAS THREADS
-    for i = 1, config.eggThreads do
-        addTask("plant_" .. i, function()
-            if config.autoPlant then doPlanting() end
-        end, config.eggDelay)
-        
-        addTask("hatch_" .. i, function()
-            if config.autoHatch then doHatching() end
-        end, config.eggDelay)
-        
-        addTask("nests_" .. i, function()
-            if config.autoNests then doNests() end
-        end, config.eggDelay)
-    end
+    -- Inicia threads de eggs
+    startEggThreads()
 
     mainThread = task.spawn(mainLoop)
-    Rayfield:Notify({ Title = "GK Hub", Content = "Farm iniciado com " .. config.eggThreads .. "x threads para eggs!", Duration = 3 })
+    Rayfield:Notify({ Title = "GK Hub", Content = "Farm iniciado com " .. config.eggThreads .. "x threads permanentes para eggs!", Duration = 3 })
 end
 
+-- Parar farm
 local function stop()
     active = false
+    stopEggThreads()
     if mainThread then task.cancel(mainThread); mainThread = nil end
     activeBosses = {}
     Rayfield:Notify({ Title = "GK Hub", Content = "Farm parado.", Duration = 2 })
@@ -381,7 +425,7 @@ end
 local win = Rayfield:CreateWindow({
     Name = "GK Hub",
     LoadingTitle = "Pet Swarm Sim",
-    LoadingSubtitle = "Multi-Thread Edition",
+    LoadingSubtitle = "Ultra Fast Edition",
     ConfigurationSaving = { Enabled = true, FolderName = "gkhub", FileName = "Config" },
     Theme = "Dark"
 })
@@ -554,6 +598,6 @@ end)
 
 game:GetService("StarterGui"):SetCore("SendNotification", {
     Title = "GK Hub",
-    Text = "Multi-Thread Edition loaded!",
+    Text = "Ultra Fast Edition loaded!",
     Duration = 3
 })
